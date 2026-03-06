@@ -228,6 +228,47 @@ else:
                 help=f"Customers can pick any {n_items} items from this pool."
             )
 
+        # ── Live AirAsia price preview based on selection + bundle type ──
+        if selected_items:
+            sel_df = df[df["Item Name"].isin(selected_items)].reset_index(drop=True)
+            if is_same:
+                # Each selected item × n_items
+                preview_rows = []
+                for _, row in sel_df.iterrows():
+                    preview_rows.append({
+                        "Item": row["Item Name"],
+                        f"× {n_items} AirAsia (MYR)": round(row["AirAsia Price"] * n_items, 2),
+                    })
+                preview_df = pd.DataFrame(preview_rows)
+                st.markdown(f"**AirAsia Price Preview (× {n_items})**")
+                st.dataframe(preview_df, use_container_width=True, hide_index=True,
+                    column_config={
+                        "Item": st.column_config.TextColumn("Item", width="large"),
+                        f"× {n_items} AirAsia (MYR)": st.column_config.NumberColumn(
+                            f"× {n_items} AirAsia (MYR)", format="MYR %.2f", width="medium"),
+                    }
+                )
+            else:
+                # Show all combinations with their combined AirAsia total
+                import itertools as _it
+                records = [row for _, row in sel_df.iterrows()]
+                combos  = list(_it.combinations(records, n_items))
+                preview_rows = []
+                for combo in combos:
+                    row_data = {f"Item {i+1}": r["Item Name"] for i, r in enumerate(combo)}
+                    row_data["AirAsia Total (MYR)"] = round(sum(r["AirAsia Price"] for r in combo), 2)
+                    preview_rows.append(row_data)
+                preview_df = pd.DataFrame(preview_rows)
+                st.markdown(f"**AirAsia Price Preview (Any {n_items} combos)**")
+                item_cols = {f"Item {i+1}": st.column_config.TextColumn(f"Item {i+1}", width="medium")
+                             for i in range(n_items)}
+                item_cols["AirAsia Total (MYR)"] = st.column_config.NumberColumn(
+                    "AirAsia Total (MYR)", format="MYR %.2f", width="medium")
+                st.dataframe(preview_df, use_container_width=True, hide_index=True,
+                    column_config=item_cols,
+                    height=min(38 * len(preview_rows) + 46, 300),
+                )
+
         st.markdown("**Pricing Mode**")
         pricing_mode = st.radio(
             "Pricing Mode",
