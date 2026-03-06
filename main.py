@@ -162,7 +162,7 @@ with st.sidebar:
 
             required_cols = {
                 "Duty Free Code", "Domlux Code", "Item Name",
-                "AirAsia Price (MYR)", "Cost Price (MYR)", "Retail Price (MYR)"
+                "AirAsia Price", "Cost Price", "Retail Price"
             }
             missing = required_cols - set(df.columns)
             if missing:
