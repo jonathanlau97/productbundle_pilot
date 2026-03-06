@@ -268,19 +268,19 @@ else:
                         "margin_pct":   margin_pct,
                     })
             else:
-                pairs = list(itertools.combinations(selected_df.itertuples(index=False), 2))
+                records = [row for _, row in selected_df.iterrows()]
+                pairs = list(itertools.combinations(records, 2))
                 for a, b in pairs:
-                    ad, bd       = a._asdict(), b._asdict()
-                    retail_total = ad["Retail Price"] + bd["Retail Price"]
-                    cost_total   = ad["Cost Price"]   + bd["Cost Price"]
+                    retail_total = a["Retail Price"] + b["Retail Price"]
+                    cost_total   = a["Cost Price"]   + b["Cost Price"]
                     savings      = retail_total - bundle_price
                     margin_amt   = bundle_price - cost_total
                     margin_pct   = (margin_amt / bundle_price * 100) if bundle_price > 0 else 0
                     bundles.append({
                         "type": "Any 2",
-                        "items": [ad["Item Name"], bd["Item Name"]],
-                        "duty_codes":   [ad["Duty Free Code"], bd["Duty Free Code"]],
-                        "domlux_codes": [ad["Domlux Code"],    bd["Domlux Code"]],
+                        "items": [a["Item Name"], b["Item Name"]],
+                        "duty_codes":   [a["Duty Free Code"], b["Duty Free Code"]],
+                        "domlux_codes": [a["Domlux Code"],    b["Domlux Code"]],
                         "retail_total": retail_total,
                         "cost_total":   cost_total,
                         "bundle_price": bundle_price,
