@@ -190,10 +190,10 @@ if df is None:
     </div>
     """, unsafe_allow_html=True)
 else:
-    col_left, col_right = st.columns([1.1, 1.9], gap="large")
-
-    with col_left:
-        st.markdown('<div class="section-title">⚙️ Bundle Configuration</div>', unsafe_allow_html=True)
+    # ── All config lives in the sidebar so the main area is full-width ────
+    with st.sidebar:
+        st.markdown("---")
+        st.markdown("### ⚙️ Bundle Configuration")
 
         bundle_type = st.radio(
             "Bundle Type",
@@ -201,25 +201,23 @@ else:
             help="**Buy 2**: Customer buys 2 of the SAME item.\n\n**Any 2**: Customer picks any 2 from the pool."
         )
 
-        st.markdown("---")
-        st.markdown("**Select Items for Bundle Pool**")
+        st.markdown("**Select Items**")
         item_names = df["Item Name"].tolist()
 
         if bundle_type == "Buy 2 (Same Item × 2)":
             selected_items = st.multiselect(
-                "Choose item(s) to offer as Buy 2 deal",
+                "Items for Buy 2 deal",
                 options=item_names,
                 placeholder="Select one or more items..."
             )
         else:
             selected_items = st.multiselect(
-                "Choose items for the Any 2 pool",
+                "Items for Any 2 pool",
                 options=item_names,
                 placeholder="Select 2 or more items...",
                 help="Customers can pick any 2 items from this pool."
             )
 
-        st.markdown("---")
         st.markdown("**Pricing Mode**")
         pricing_mode = st.radio(
             "Pricing Mode",
@@ -253,146 +251,140 @@ else:
         st.markdown("---")
         generate = st.button("🎁 Generate Bundle Deals", use_container_width=True)
 
-    with col_right:
-        st.markdown('<div class="section-title">🎁 Generated Bundle Deals</div>', unsafe_allow_html=True)
+    # ── Full-width output area ─────────────────────────────────────────────
+    st.markdown('<div class="section-title">🎁 Generated Bundle Deals</div>', unsafe_allow_html=True)
 
-        if not generate:
-            st.markdown("""
-            <div class="empty-state">
-                <div style="font-size:2.5rem">✨</div>
-                <div style="margin-top:0.5rem">Configure your bundle and click <b>Generate</b>.</div>
-            </div>
-            """, unsafe_allow_html=True)
-        elif not selected_items:
-            st.warning("⚠️ Please select at least one item.")
-        elif bundle_type == "Any 2 (Pick from Pool)" and len(selected_items) < 2:
-            st.warning("⚠️ Select at least 2 items for an Any 2 pool.")
+    if not generate:
+        st.markdown("""
+        <div class="empty-state">
+            <div style="font-size:2.5rem">✨</div>
+            <div style="margin-top:0.5rem">Configure your bundle and click <b>Generate</b>.</div>
+        </div>
+        """, unsafe_allow_html=True)
+    elif not selected_items:
+        st.warning("⚠️ Please select at least one item.")
+    elif bundle_type == "Any 2 (Pick from Pool)" and len(selected_items) < 2:
+        st.warning("⚠️ Select at least 2 items for an Any 2 pool.")
+    else:
+        selected_df = df[df["Item Name"].isin(selected_items)].reset_index(drop=True)
+        bundles = []
+
+        def calc_bundle_price(retail_total, cost_total):
+            """Derive bundle price from the chosen pricing mode."""
+            if pricing_mode == "Set Bundle Price":
+                return pricing_input
+            elif pricing_mode == "Desired Savings (MYR)":
+                return max(retail_total - pricing_input, 0.01)
+            elif pricing_mode == "Desired Savings (%)":
+                return max(retail_total * (1 - pricing_input / 100), 0.01)
+            elif pricing_mode == "Desired Margin (MYR)":
+                return cost_total + pricing_input
+            else:  # Desired Margin (%)
+                if pricing_input >= 100:
+                    return cost_total * 2  # guard against div/0
+                return cost_total / (1 - pricing_input / 100)
+
+        if bundle_type == "Buy 2 (Same Item × 2)":
+            for _, row in selected_df.iterrows():
+                retail_total = row["Retail Price"] * 2
+                cost_total   = row["Cost Price"] * 2
+                bundle_price = calc_bundle_price(retail_total, cost_total)
+                savings      = retail_total - bundle_price
+                margin_amt   = bundle_price - cost_total
+                margin_pct   = (margin_amt / bundle_price * 100) if bundle_price > 0 else 0
+                bundles.append({
+                    "type": "Buy 2",
+                    "items": [row["Item Name"], row["Item Name"]],
+                    "duty_codes":   [row["Duty Free Code"]],
+                    "domlux_codes": [row["Domlux Code"]],
+                    "retail_total": retail_total,
+                    "cost_total":   cost_total,
+                    "bundle_price": bundle_price,
+                    "savings":      savings,
+                    "margin_amt":   margin_amt,
+                    "margin_pct":   margin_pct,
+                })
         else:
-            selected_df = df[df["Item Name"].isin(selected_items)].reset_index(drop=True)
-            bundles = []
+            records = [row for _, row in selected_df.iterrows()]
+            pairs = list(itertools.combinations(records, 2))
+            for a, b in pairs:
+                retail_total = a["Retail Price"] + b["Retail Price"]
+                cost_total   = a["Cost Price"]   + b["Cost Price"]
+                bundle_price = calc_bundle_price(retail_total, cost_total)
+                savings      = retail_total - bundle_price
+                margin_amt   = bundle_price - cost_total
+                margin_pct   = (margin_amt / bundle_price * 100) if bundle_price > 0 else 0
+                bundles.append({
+                    "type": "Any 2",
+                    "items": [a["Item Name"], b["Item Name"]],
+                    "duty_codes":   [a["Duty Free Code"], b["Duty Free Code"]],
+                    "domlux_codes": [a["Domlux Code"],    b["Domlux Code"]],
+                    "retail_total": retail_total,
+                    "cost_total":   cost_total,
+                    "bundle_price": bundle_price,
+                    "savings":      savings,
+                    "margin_amt":   margin_amt,
+                    "margin_pct":   margin_pct,
+                })
 
-            def calc_bundle_price(retail_total, cost_total):
-                """Derive bundle price from the chosen pricing mode."""
-                if pricing_mode == "Set Bundle Price":
-                    return pricing_input
-                elif pricing_mode == "Desired Savings (MYR)":
-                    return max(retail_total - pricing_input, 0.01)
-                elif pricing_mode == "Desired Savings (%)":
-                    return max(retail_total * (1 - pricing_input / 100), 0.01)
-                elif pricing_mode == "Desired Margin (MYR)":
-                    return cost_total + pricing_input
-                else:  # Desired Margin (%)
-                    if pricing_input >= 100:
-                        return cost_total * 2  # guard against div/0
-                    return cost_total / (1 - pricing_input / 100)
+        if bundles:
+            # ── Build display dataframe ───────────────────────────────
+            rows = []
+            for b in bundles:
+                rows.append({
+                    "Item 1":       b["items"][0],
+                    "Item 2":       b["items"][1] if len(b["items"]) > 1 else b["items"][0],
+                    "Bundle Price": round(b["bundle_price"], 2),
+                    "Retail Total": round(b["retail_total"], 2),
+                    "Cost Total":   round(b["cost_total"], 2),
+                    "Savings":      round(b["savings"], 2),
+                    "Margin (MYR)": round(b["margin_amt"], 2),
+                    "Margin (%)":   round(b["margin_pct"], 1),
+                })
+            result_df = pd.DataFrame(rows)
 
-            if bundle_type == "Buy 2 (Same Item × 2)":
-                for _, row in selected_df.iterrows():
-                    retail_total = row["Retail Price"] * 2
-                    cost_total   = row["Cost Price"] * 2
-                    bundle_price = calc_bundle_price(retail_total, cost_total)
-                    savings      = retail_total - bundle_price
-                    margin_amt   = bundle_price - cost_total
-                    margin_pct   = (margin_amt / bundle_price * 100) if bundle_price > 0 else 0
-                    bundles.append({
-                        "type": "Buy 2",
-                        "items": [row["Item Name"], row["Item Name"]],
-                        "duty_codes":   [row["Duty Free Code"]],
-                        "domlux_codes": [row["Domlux Code"]],
-                        "retail_total": retail_total,
-                        "cost_total":   cost_total,
-                        "bundle_price": bundle_price,
-                        "savings":      savings,
-                        "margin_amt":   margin_amt,
-                        "margin_pct":   margin_pct,
-                    })
-            else:
-                records = [row for _, row in selected_df.iterrows()]
-                pairs = list(itertools.combinations(records, 2))
-                for a, b in pairs:
-                    retail_total = a["Retail Price"] + b["Retail Price"]
-                    cost_total   = a["Cost Price"]   + b["Cost Price"]
-                    bundle_price = calc_bundle_price(retail_total, cost_total)
-                    savings      = retail_total - bundle_price
-                    margin_amt   = bundle_price - cost_total
-                    margin_pct   = (margin_amt / bundle_price * 100) if bundle_price > 0 else 0
-                    bundles.append({
-                        "type": "Any 2",
-                        "items": [a["Item Name"], b["Item Name"]],
-                        "duty_codes":   [a["Duty Free Code"], b["Duty Free Code"]],
-                        "domlux_codes": [a["Domlux Code"],    b["Domlux Code"]],
-                        "retail_total": retail_total,
-                        "cost_total":   cost_total,
-                        "bundle_price": bundle_price,
-                        "savings":      savings,
-                        "margin_amt":   margin_amt,
-                        "margin_pct":   margin_pct,
-                    })
+            st.markdown(
+                f"<div style='margin-bottom:0.5rem;font-family:Helvetica Neue,Helvetica,Arial,sans-serif'>"
+                f"<b>{len(bundles)} bundle(s) generated</b> &nbsp;·&nbsp;"
+                f"<span style='color:#6b7280;font-size:0.85rem'>Click table · Ctrl+A · Ctrl+C to copy</span>"
+                f"</div>",
+                unsafe_allow_html=True
+            )
 
-            if bundles:
-                # ── Build display dataframe ───────────────────────────────
-                rows = []
-                for b in bundles:
-                    rows.append({
-                        "Type":           b["type"],
-                        "Item 1":         b["items"][0],
-                        "Item 2":         b["items"][1] if len(b["items"]) > 1 else b["items"][0],
-                        "DF Code(s)":     " / ".join(str(c) for c in b["duty_codes"]),
-                        "DL Code(s)":     " / ".join(str(c) for c in b["domlux_codes"]),
-                        "Bundle Price":   round(b["bundle_price"], 2),
-                        "Retail Total":   round(b["retail_total"], 2),
-                        "Cost Total":     round(b["cost_total"], 2),
-                        "Savings":        round(b["savings"], 2),
-                        "Margin (MYR)":   round(b["margin_amt"], 2),
-                        "Margin (%)":     round(b["margin_pct"], 1),
-                    })
-                result_df = pd.DataFrame(rows)
+            st.dataframe(
+                result_df,
+                use_container_width=True,
+                height=min(38 * len(bundles) + 46, 520),
+                hide_index=True,
+                column_config={
+                    "Item 1":       st.column_config.TextColumn("Item 1",         width="large"),
+                    "Item 2":       st.column_config.TextColumn("Item 2",         width="large"),
+                    "Bundle Price": st.column_config.NumberColumn("Bundle (MYR)", format="%.2f", width="small"),
+                    "Retail Total": st.column_config.NumberColumn("Retail (MYR)", format="%.2f", width="small"),
+                    "Cost Total":   st.column_config.NumberColumn("Cost (MYR)",   format="%.2f", width="small"),
+                    "Savings":      st.column_config.NumberColumn("Savings",      format="%.2f", width="small"),
+                    "Margin (MYR)": st.column_config.NumberColumn("Margin (MYR)", format="%.2f", width="small"),
+                    "Margin (%)":   st.column_config.NumberColumn("Margin (%)",   format="%.1f%%", width="small"),
+                }
+            )
 
-                st.markdown(
-                    f"<div style='margin-bottom:0.6rem;font-family:Helvetica Neue,Helvetica,Arial,sans-serif'>"
-                    f"<b>{len(bundles)} bundle(s)</b> at <b>MYR {bundle_price:,.2f}</b> each &nbsp;·&nbsp;"
-                    f"<span style='color:#6b7280;font-size:0.85rem'>Click any cell · Ctrl+A to select all · Ctrl+C to copy</span>"
-                    f"</div>",
-                    unsafe_allow_html=True
-                )
+            # ── Summary metrics ───────────────────────────────────────
+            st.markdown("")
+            m1, m2, m3, m4 = st.columns(4)
+            m1.metric("Total Bundles",        len(bundles))
+            m2.metric("Avg Savings / Bundle", f"MYR {result_df['Savings'].mean():,.2f}")
+            m3.metric("Total Savings",        f"MYR {result_df['Savings'].sum():,.2f}")
+            m4.metric("Avg Margin",           f"{result_df['Margin (%)'].mean():.1f}%")
 
-                st.dataframe(
-                    result_df,
-                    use_container_width=True,
-                    height=min(120 + len(bundles) * 38, 620),
-                    hide_index=True,
-                    column_config={
-                        "Type":         st.column_config.TextColumn("Type",           width="small"),
-                        "Item 1":       st.column_config.TextColumn("Item 1",         width="large"),
-                        "Item 2":       st.column_config.TextColumn("Item 2",         width="large"),
-                        "DF Code(s)":   st.column_config.TextColumn("DF Code(s)",     width="small"),
-                        "DL Code(s)":   st.column_config.TextColumn("DL Code(s)",     width="small"),
-                        "Bundle Price": st.column_config.NumberColumn("Bundle Price (MYR)", format="MYR %.2f", width="medium"),
-                        "Retail Total": st.column_config.NumberColumn("Retail Total (MYR)", format="MYR %.2f", width="medium"),
-                        "Cost Total":   st.column_config.NumberColumn("Cost Total (MYR)",   format="MYR %.2f", width="medium"),
-                        "Savings":      st.column_config.NumberColumn("Savings (MYR)",      format="MYR %.2f", width="medium"),
-                        "Margin (MYR)": st.column_config.NumberColumn("Margin (MYR)",       format="MYR %.2f", width="medium"),
-                        "Margin (%)":   st.column_config.NumberColumn("Margin (%)",         format="%.1f%%",   width="small"),
-                    }
-                )
-
-                # ── Summary metrics ───────────────────────────────────────
-                st.markdown("")
-                m1, m2, m3, m4 = st.columns(4)
-                m1.metric("Total Bundles",        len(bundles))
-                m2.metric("Avg Savings / Bundle", f"MYR {result_df['Savings'].mean():,.2f}")
-                m3.metric("Total Savings",        f"MYR {result_df['Savings'].sum():,.2f}")
-                m4.metric("Avg Margin",           f"{result_df['Margin (%)'].mean():.1f}%")
-
-                # ── CSV download as secondary option ──────────────────────
-                st.markdown("---")
-                csv_out = result_df.to_csv(index=False).encode("utf-8")
-                st.download_button(
-                    "⬇️ Download as CSV",
-                    data=csv_out,
-                    file_name="bundle_deals.csv",
-                    mime="text/csv",
-                    use_container_width=True
-                )
-            else:
-                st.info("No bundles could be generated. Check your selection.")
+            # ── CSV download as secondary option ──────────────────────
+            st.markdown("---")
+            csv_out = result_df.to_csv(index=False).encode("utf-8")
+            st.download_button(
+                "⬇️ Download as CSV",
+                data=csv_out,
+                file_name="bundle_deals.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
+        else:
+            st.info("No bundles could be generated. Check your selection.")
