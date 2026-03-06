@@ -220,11 +220,34 @@ else:
             )
 
         st.markdown("---")
-        st.markdown("**Bundle Price (MYR)**")
-        bundle_price = st.number_input(
-            "Set the bundle deal price",
-            min_value=0.01, value=100.00, step=0.50, format="%.2f",
-            label_visibility="collapsed"
+        st.markdown("**Pricing Mode**")
+        pricing_mode = st.radio(
+            "Pricing Mode",
+            ["Set Bundle Price", "Desired Savings (MYR)", "Desired Savings (%)", "Desired Margin (MYR)", "Desired Margin (%)"],
+            label_visibility="collapsed",
+            help=(
+                "**Set Bundle Price** — enter a fixed price directly.\n\n"
+                "**Desired Savings (MYR)** — bundle price = Retail Total − Savings.\n\n"
+                "**Desired Savings (%)** — bundle price = Retail Total × (1 − %/100).\n\n"
+                "**Desired Margin (MYR)** — bundle price = Cost Total + Margin.\n\n"
+                "**Desired Margin (%)** — bundle price = Cost Total / (1 − %/100)."
+            )
+        )
+
+        if pricing_mode == "Set Bundle Price":
+            pricing_label, pricing_value, pricing_step, pricing_fmt, pricing_min = "Bundle Price (MYR)", 100.00, 0.50, "%.2f", 0.01
+        elif pricing_mode == "Desired Savings (MYR)":
+            pricing_label, pricing_value, pricing_step, pricing_fmt, pricing_min = "Customer Savings (MYR)", 20.00, 1.00, "%.2f", 0.01
+        elif pricing_mode == "Desired Savings (%)":
+            pricing_label, pricing_value, pricing_step, pricing_fmt, pricing_min = "Customer Savings (% of Retail)", 10.0, 0.5, "%.1f", 0.1
+        elif pricing_mode == "Desired Margin (MYR)":
+            pricing_label, pricing_value, pricing_step, pricing_fmt, pricing_min = "Desired Margin (MYR)", 20.00, 1.00, "%.2f", 0.01
+        else:
+            pricing_label, pricing_value, pricing_step, pricing_fmt, pricing_min = "Desired Margin (% of Bundle Price)", 20.0, 0.5, "%.1f", 0.1
+
+        pricing_input = st.number_input(
+            pricing_label,
+            min_value=pricing_min, value=pricing_value, step=pricing_step, format=pricing_fmt,
         )
 
         st.markdown("---")
@@ -248,10 +271,26 @@ else:
             selected_df = df[df["Item Name"].isin(selected_items)].reset_index(drop=True)
             bundles = []
 
+            def calc_bundle_price(retail_total, cost_total):
+                """Derive bundle price from the chosen pricing mode."""
+                if pricing_mode == "Set Bundle Price":
+                    return pricing_input
+                elif pricing_mode == "Desired Savings (MYR)":
+                    return max(retail_total - pricing_input, 0.01)
+                elif pricing_mode == "Desired Savings (%)":
+                    return max(retail_total * (1 - pricing_input / 100), 0.01)
+                elif pricing_mode == "Desired Margin (MYR)":
+                    return cost_total + pricing_input
+                else:  # Desired Margin (%)
+                    if pricing_input >= 100:
+                        return cost_total * 2  # guard against div/0
+                    return cost_total / (1 - pricing_input / 100)
+
             if bundle_type == "Buy 2 (Same Item × 2)":
                 for _, row in selected_df.iterrows():
                     retail_total = row["Retail Price"] * 2
                     cost_total   = row["Cost Price"] * 2
+                    bundle_price = calc_bundle_price(retail_total, cost_total)
                     savings      = retail_total - bundle_price
                     margin_amt   = bundle_price - cost_total
                     margin_pct   = (margin_amt / bundle_price * 100) if bundle_price > 0 else 0
@@ -273,6 +312,7 @@ else:
                 for a, b in pairs:
                     retail_total = a["Retail Price"] + b["Retail Price"]
                     cost_total   = a["Cost Price"]   + b["Cost Price"]
+                    bundle_price = calc_bundle_price(retail_total, cost_total)
                     savings      = retail_total - bundle_price
                     margin_amt   = bundle_price - cost_total
                     margin_pct   = (margin_amt / bundle_price * 100) if bundle_price > 0 else 0
