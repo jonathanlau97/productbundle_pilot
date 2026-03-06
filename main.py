@@ -157,7 +157,15 @@ with st.sidebar:
 
     if uploaded_file:
         try:
-            df = pd.read_csv(uploaded_file)
+            for enc in ["utf-8", "latin-1", "cp1252", "iso-8859-1"]:
+                try:
+                    uploaded_file.seek(0)
+                    df = pd.read_csv(uploaded_file, encoding=enc)
+                    break
+                except (UnicodeDecodeError, Exception):
+                    df = None
+            if df is None:
+                raise ValueError("Could not decode file with any supported encoding.")
             df.columns = df.columns.str.strip()
 
             required_cols = {
@@ -170,11 +178,11 @@ with st.sidebar:
                 df = None
             else:
                 # Clean numeric columns
-                for col in ["AirAsia Price (MYR)", "Cost Price (MYR)", "Retail Price (MYR)"]:
+                for col in ["AirAsia Price", "Cost Price", "Retail Price"]:
                     df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
                 st.success(f"✅ {len(df)} products loaded")
-                st.dataframe(df[["Item Name", "Retail Price (MYR)"]].rename(
-                    columns={"Retail Price (MYR)": "Retail (MYR)"}
+                st.dataframe(df[["Item Name", "Retail Price"]].rename(
+                    columns={"Retail Price": "Retail"}
                 ), use_container_width=True, height=300)
         except Exception as e:
             st.error(f"Error reading file: {e}")
@@ -230,7 +238,7 @@ else:
         st.markdown("---")
 
         # Bundle price
-        st.markdown("**Bundle Price (MYR)**")
+        st.markdown("**Bundle Price**")
         bundle_price = st.number_input(
             "Set the bundle deal price",
             min_value=0.01,
@@ -264,7 +272,7 @@ else:
 
             if bundle_type == "Buy 2 (Same Item × 2)":
                 for _, row in selected_df.iterrows():
-                    retail_total = row["Retail Price (MYR)"] * 2
+                    retail_total = row["Retail Price"] * 2
                     savings = retail_total - bundle_price
                     bundles.append({
                         "type": "Buy 2",
@@ -281,8 +289,8 @@ else:
                 for a, b in pairs:
                     retail_total = getattr(a, "Retail_Price_MYR_".replace(" ", "_"), 0)
                     # Access by column name safely
-                    a_retail = a._asdict().get("Retail Price (MYR)", 0)
-                    b_retail = b._asdict().get("Retail Price (MYR)", 0)
+                    a_retail = a._asdict().get("Retail Price", 0)
+                    b_retail = b._asdict().get("Retail Price", 0)
                     retail_total = a_retail + b_retail
                     savings = retail_total - bundle_price
                     bundles.append({
