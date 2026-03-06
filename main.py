@@ -11,13 +11,8 @@ st.set_page_config(
 # ── Styling ──────────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap');
-
 html, body, [class*="css"] {
-    font-family: 'DM Sans', sans-serif;
-}
-h1, h2, h3, .stMarkdown h1, .stMarkdown h2 {
-    font-family: 'Syne', sans-serif !important;
+    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif !important;
 }
 
 .main-header {
@@ -29,7 +24,7 @@ h1, h2, h3, .stMarkdown h1, .stMarkdown h2 {
     text-align: center;
 }
 .main-header h1 {
-    font-family: 'Syne', sans-serif;
+    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
     font-size: 2.6rem;
     font-weight: 800;
     letter-spacing: -1px;
@@ -49,16 +44,12 @@ h1, h2, h3, .stMarkdown h1, .stMarkdown h2 {
     padding: 1.4rem 1.6rem;
     margin-bottom: 1rem;
     box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-    transition: box-shadow 0.2s;
-}
-.bundle-card:hover {
-    box-shadow: 0 6px 20px rgba(48,43,99,0.12);
 }
 .bundle-type-badge {
     display: inline-block;
     background: linear-gradient(90deg, #7c3aed, #4f46e5);
     color: white;
-    font-family: 'Syne', sans-serif;
+    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
     font-weight: 700;
     font-size: 0.72rem;
     letter-spacing: 1.5px;
@@ -67,17 +58,6 @@ h1, h2, h3, .stMarkdown h1, .stMarkdown h2 {
     border-radius: 999px;
     margin-bottom: 0.8rem;
 }
-.savings-badge {
-    background: #f0fdf4;
-    color: #15803d;
-    border: 1px solid #bbf7d0;
-    border-radius: 8px;
-    padding: 6px 14px;
-    font-weight: 600;
-    font-size: 0.9rem;
-    display: inline-block;
-    margin-top: 0.5rem;
-}
 .price-row {
     display: flex;
     align-items: center;
@@ -85,9 +65,7 @@ h1, h2, h3, .stMarkdown h1, .stMarkdown h2 {
     margin-top: 0.8rem;
     flex-wrap: wrap;
 }
-.price-item {
-    text-align: center;
-}
+.price-item { text-align: center; }
 .price-label {
     font-size: 0.72rem;
     color: #9ca3af;
@@ -95,13 +73,13 @@ h1, h2, h3, .stMarkdown h1, .stMarkdown h2 {
     letter-spacing: 0.5px;
 }
 .price-value {
-    font-family: 'Syne', sans-serif;
+    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
     font-size: 1.15rem;
     font-weight: 700;
 }
 .price-bundle { color: #7c3aed; }
 .price-retail { color: #6b7280; text-decoration: line-through; font-weight: 400; font-size: 1rem; }
-.price-savings { color: #15803d; }
+
 .item-pill {
     background: #f5f3ff;
     color: #4338ca;
@@ -113,7 +91,7 @@ h1, h2, h3, .stMarkdown h1, .stMarkdown h2 {
     margin: 3px 4px 3px 0;
 }
 .section-title {
-    font-family: 'Syne', sans-serif;
+    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
     font-weight: 700;
     font-size: 1.2rem;
     color: #1e1b4b;
@@ -125,19 +103,22 @@ h1, h2, h3, .stMarkdown h1, .stMarkdown h2 {
     padding: 3rem 1rem;
     font-size: 1rem;
 }
+.metric-chip {
+    border-radius: 8px;
+    padding: 6px 14px;
+    font-weight: 600;
+    font-size: 0.88rem;
+    display: inline-block;
+}
 .stButton > button {
     background: linear-gradient(135deg, #7c3aed, #4f46e5) !important;
     color: white !important;
     border: none !important;
     border-radius: 10px !important;
-    font-family: 'Syne', sans-serif !important;
+    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif !important;
     font-weight: 600 !important;
     font-size: 0.95rem !important;
     padding: 0.55rem 1.5rem !important;
-    transition: opacity 0.2s !important;
-}
-.stButton > button:hover {
-    opacity: 0.88 !important;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -157,6 +138,7 @@ with st.sidebar:
 
     if uploaded_file:
         try:
+            df = None
             for enc in ["utf-8", "latin-1", "cp1252", "iso-8859-1"]:
                 try:
                     uploaded_file.seek(0)
@@ -166,24 +148,31 @@ with st.sidebar:
                     df = None
             if df is None:
                 raise ValueError("Could not decode file with any supported encoding.")
+
             df.columns = df.columns.str.strip()
 
-            required_cols = {
-                "Duty Free Code", "Domlux Code", "Item Name",
-                "AirAsia Price", "Cost Price", "Retail Price"
-            }
+            # Flexible column matching — tolerate "(MYR)" suffix in headers
+            rename_map = {}
+            for col in df.columns:
+                for base in ["AirAsia Price", "Cost Price", "Retail Price"]:
+                    if col.startswith(base) and col != base:
+                        rename_map[col] = base
+            df.rename(columns=rename_map, inplace=True)
+
+            required_cols = {"Duty Free Code", "Domlux Code", "Item Name",
+                             "AirAsia Price", "Cost Price", "Retail Price"}
             missing = required_cols - set(df.columns)
             if missing:
                 st.error(f"Missing columns: {', '.join(missing)}")
                 df = None
             else:
-                # Clean numeric columns
                 for col in ["AirAsia Price", "Cost Price", "Retail Price"]:
                     df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
                 st.success(f"✅ {len(df)} products loaded")
-                st.dataframe(df[["Item Name", "Retail Price"]].rename(
-                    columns={"Retail Price": "Retail"}
-                ), use_container_width=True, height=300)
+                st.dataframe(
+                    df[["Item Name", "Retail Price", "Cost Price"]],
+                    use_container_width=True, height=300
+                )
         except Exception as e:
             st.error(f"Error reading file: {e}")
             df = None
@@ -196,9 +185,7 @@ if df is None:
     st.markdown("""
     <div class="empty-state">
         <div style="font-size:3rem">📋</div>
-        <div style="font-family:'Syne',sans-serif;font-size:1.3rem;font-weight:700;color:#4b5563;margin-top:0.5rem">
-            No catalogue loaded
-        </div>
+        <div style="font-size:1.3rem;font-weight:700;color:#4b5563;margin-top:0.5rem">No catalogue loaded</div>
         <div style="margin-top:0.5rem">Upload a CSV in the sidebar to begin building bundle deals.</div>
     </div>
     """, unsafe_allow_html=True)
@@ -208,16 +195,13 @@ else:
     with col_left:
         st.markdown('<div class="section-title">⚙️ Bundle Configuration</div>', unsafe_allow_html=True)
 
-        # Bundle type
         bundle_type = st.radio(
             "Bundle Type",
             ["Buy 2 (Same Item × 2)", "Any 2 (Pick from Pool)"],
-            help="**Buy 2**: Customer buys 2 of the SAME item at the bundle price.\n\n**Any 2**: Customer picks any 2 items from the selected pool."
+            help="**Buy 2**: Customer buys 2 of the SAME item.\n\n**Any 2**: Customer picks any 2 from the pool."
         )
 
         st.markdown("---")
-
-        # Item selection
         st.markdown("**Select Items for Bundle Pool**")
         item_names = df["Item Name"].tolist()
 
@@ -236,15 +220,10 @@ else:
             )
 
         st.markdown("---")
-
-        # Bundle price
-        st.markdown("**Bundle Price**")
+        st.markdown("**Bundle Price (MYR)**")
         bundle_price = st.number_input(
             "Set the bundle deal price",
-            min_value=0.01,
-            value=100.00,
-            step=0.50,
-            format="%.2f",
+            min_value=0.01, value=100.00, step=0.50, format="%.2f",
             label_visibility="collapsed"
         )
 
@@ -267,100 +246,109 @@ else:
             st.warning("⚠️ Select at least 2 items for an Any 2 pool.")
         else:
             selected_df = df[df["Item Name"].isin(selected_items)].reset_index(drop=True)
-
             bundles = []
 
             if bundle_type == "Buy 2 (Same Item × 2)":
                 for _, row in selected_df.iterrows():
                     retail_total = row["Retail Price"] * 2
-                    savings = retail_total - bundle_price
+                    cost_total   = row["Cost Price"] * 2
+                    savings      = retail_total - bundle_price
+                    margin_amt   = bundle_price - cost_total
+                    margin_pct   = (margin_amt / bundle_price * 100) if bundle_price > 0 else 0
                     bundles.append({
                         "type": "Buy 2",
                         "items": [row["Item Name"], row["Item Name"]],
-                        "duty_codes": [row["Duty Free Code"]],
+                        "duty_codes":   [row["Duty Free Code"]],
                         "domlux_codes": [row["Domlux Code"]],
                         "retail_total": retail_total,
+                        "cost_total":   cost_total,
                         "bundle_price": bundle_price,
-                        "savings": savings,
+                        "savings":      savings,
+                        "margin_amt":   margin_amt,
+                        "margin_pct":   margin_pct,
                     })
             else:
-                # All combinations of any 2 from pool
                 pairs = list(itertools.combinations(selected_df.itertuples(index=False), 2))
                 for a, b in pairs:
-                    retail_total = getattr(a, "Retail_Price_MYR_".replace(" ", "_"), 0)
-                    # Access by column name safely
-                    a_retail = a._asdict().get("Retail Price", 0)
-                    b_retail = b._asdict().get("Retail Price", 0)
-                    retail_total = a_retail + b_retail
-                    savings = retail_total - bundle_price
+                    ad, bd       = a._asdict(), b._asdict()
+                    retail_total = ad["Retail Price"] + bd["Retail Price"]
+                    cost_total   = ad["Cost Price"]   + bd["Cost Price"]
+                    savings      = retail_total - bundle_price
+                    margin_amt   = bundle_price - cost_total
+                    margin_pct   = (margin_amt / bundle_price * 100) if bundle_price > 0 else 0
                     bundles.append({
                         "type": "Any 2",
-                        "items": [a._asdict()["Item Name"], b._asdict()["Item Name"]],
-                        "duty_codes": [a._asdict()["Duty Free Code"], b._asdict()["Duty Free Code"]],
-                        "domlux_codes": [a._asdict()["Domlux Code"], b._asdict()["Domlux Code"]],
+                        "items": [ad["Item Name"], bd["Item Name"]],
+                        "duty_codes":   [ad["Duty Free Code"], bd["Duty Free Code"]],
+                        "domlux_codes": [ad["Domlux Code"],    bd["Domlux Code"]],
                         "retail_total": retail_total,
+                        "cost_total":   cost_total,
                         "bundle_price": bundle_price,
-                        "savings": savings,
+                        "savings":      savings,
+                        "margin_amt":   margin_amt,
+                        "margin_pct":   margin_pct,
                     })
 
             if bundles:
-                st.markdown(f"**{len(bundles)} bundle(s) generated** at **MYR {bundle_price:,.2f}** each")
-                st.markdown("")
-
-                for i, b in enumerate(bundles, 1):
-                    savings_color = "#15803d" if b["savings"] >= 0 else "#dc2626"
-                    savings_label = f"Save MYR {b['savings']:,.2f}" if b["savings"] >= 0 else f"Over retail by MYR {abs(b['savings']):,.2f}"
-                    savings_bg = "#f0fdf4" if b["savings"] >= 0 else "#fef2f2"
-                    savings_border = "#bbf7d0" if b["savings"] >= 0 else "#fecaca"
-
-                    items_html = "".join(f'<span class="item-pill">{item}</span>' for item in b["items"])
-                    codes_html = ""
-                    for dc, dlc in zip(b["duty_codes"], b["domlux_codes"]):
-                        codes_html += f'<span style="font-size:0.75rem;color:#9ca3af;margin-right:12px">📦 DF: <b>{dc}</b> · DL: <b>{dlc}</b></span>'
-
-                    st.markdown(f"""
-                    <div class="bundle-card">
-                        <span class="bundle-type-badge">{b["type"]}</span>
-                        <div style="margin-bottom:6px">{items_html}</div>
-                        <div>{codes_html}</div>
-                        <div class="price-row">
-                            <div class="price-item">
-                                <div class="price-label">Bundle Price</div>
-                                <div class="price-value price-bundle">MYR {b["bundle_price"]:,.2f}</div>
-                            </div>
-                            <div style="color:#d1d5db;font-size:1.2rem">vs</div>
-                            <div class="price-item">
-                                <div class="price-label">Retail Total</div>
-                                <div class="price-value price-retail">MYR {b["retail_total"]:,.2f}</div>
-                            </div>
-                            <div>
-                                <div style="background:{savings_bg};color:{savings_color};border:1px solid {savings_border};
-                                    border-radius:8px;padding:6px 14px;font-weight:600;font-size:0.88rem;display:inline-block">
-                                    {'💚' if b['savings'] >= 0 else '⚠️'} {savings_label}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
-
-                # ── Export ────────────────────────────────────────────────────
-                st.markdown("---")
-                export_rows = []
+                # ── Build display dataframe ───────────────────────────────
+                rows = []
                 for b in bundles:
-                    export_rows.append({
-                        "Bundle Type": b["type"],
-                        "Item 1": b["items"][0],
-                        "Item 2": b["items"][1] if len(b["items"]) > 1 else b["items"][0],
-                        "Duty Free Code(s)": " / ".join(str(c) for c in b["duty_codes"]),
-                        "Domlux Code(s)": " / ".join(str(c) for c in b["domlux_codes"]),
-                        "Bundle Price (MYR)": round(b["bundle_price"], 2),
-                        "Retail Total (MYR)": round(b["retail_total"], 2),
-                        "Savings (MYR)": round(b["savings"], 2),
+                    rows.append({
+                        "Type":           b["type"],
+                        "Item 1":         b["items"][0],
+                        "Item 2":         b["items"][1] if len(b["items"]) > 1 else b["items"][0],
+                        "DF Code(s)":     " / ".join(str(c) for c in b["duty_codes"]),
+                        "DL Code(s)":     " / ".join(str(c) for c in b["domlux_codes"]),
+                        "Bundle Price":   round(b["bundle_price"], 2),
+                        "Retail Total":   round(b["retail_total"], 2),
+                        "Cost Total":     round(b["cost_total"], 2),
+                        "Savings":        round(b["savings"], 2),
+                        "Margin (MYR)":   round(b["margin_amt"], 2),
+                        "Margin (%)":     round(b["margin_pct"], 1),
                     })
-                export_df = pd.DataFrame(export_rows)
-                csv_out = export_df.to_csv(index=False).encode("utf-8")
+                result_df = pd.DataFrame(rows)
+
+                st.markdown(
+                    f"<div style='margin-bottom:0.6rem;font-family:Helvetica Neue,Helvetica,Arial,sans-serif'>"
+                    f"<b>{len(bundles)} bundle(s)</b> at <b>MYR {bundle_price:,.2f}</b> each &nbsp;·&nbsp;"
+                    f"<span style='color:#6b7280;font-size:0.85rem'>Click any cell · Ctrl+A to select all · Ctrl+C to copy</span>"
+                    f"</div>",
+                    unsafe_allow_html=True
+                )
+
+                st.dataframe(
+                    result_df,
+                    use_container_width=True,
+                    height=min(120 + len(bundles) * 38, 620),
+                    hide_index=True,
+                    column_config={
+                        "Type":         st.column_config.TextColumn("Type",           width="small"),
+                        "Item 1":       st.column_config.TextColumn("Item 1",         width="large"),
+                        "Item 2":       st.column_config.TextColumn("Item 2",         width="large"),
+                        "DF Code(s)":   st.column_config.TextColumn("DF Code(s)",     width="small"),
+                        "DL Code(s)":   st.column_config.TextColumn("DL Code(s)",     width="small"),
+                        "Bundle Price": st.column_config.NumberColumn("Bundle Price (MYR)", format="MYR %.2f", width="medium"),
+                        "Retail Total": st.column_config.NumberColumn("Retail Total (MYR)", format="MYR %.2f", width="medium"),
+                        "Cost Total":   st.column_config.NumberColumn("Cost Total (MYR)",   format="MYR %.2f", width="medium"),
+                        "Savings":      st.column_config.NumberColumn("Savings (MYR)",      format="MYR %.2f", width="medium"),
+                        "Margin (MYR)": st.column_config.NumberColumn("Margin (MYR)",       format="MYR %.2f", width="medium"),
+                        "Margin (%)":   st.column_config.NumberColumn("Margin (%)",         format="%.1f%%",   width="small"),
+                    }
+                )
+
+                # ── Summary metrics ───────────────────────────────────────
+                st.markdown("")
+                m1, m2, m3, m4 = st.columns(4)
+                m1.metric("Total Bundles",        len(bundles))
+                m2.metric("Avg Savings / Bundle", f"MYR {result_df['Savings'].mean():,.2f}")
+                m3.metric("Total Savings",        f"MYR {result_df['Savings'].sum():,.2f}")
+                m4.metric("Avg Margin",           f"{result_df['Margin (%)'].mean():.1f}%")
+
+                # ── CSV download as secondary option ──────────────────────
+                st.markdown("---")
+                csv_out = result_df.to_csv(index=False).encode("utf-8")
                 st.download_button(
-                    "⬇️ Export Bundles as CSV",
+                    "⬇️ Download as CSV",
                     data=csv_out,
                     file_name="bundle_deals.csv",
                     mime="text/csv",
